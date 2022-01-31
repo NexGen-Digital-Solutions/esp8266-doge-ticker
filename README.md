@@ -3,7 +3,8 @@ Simple ESP8266 Dogecoin Ticker Tracker - API
 
 Simple NodeMCU ESP8266 Dogecoin crypto currency price tracker.
 
-Enclosure is ready-to-print STL and Cura Profile @ 0.2mm resolution w/ proper supports for OLED.
+Most STL's are ready-to-print.
+Enclosure Cura Project File is ready-to-print @ 0.2mm resolution w/ proper supports for OLED display.
 
 [Link to ESP8266 used](https://www.amazon.com/gp/product/B081CSJV2V/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1)
 
