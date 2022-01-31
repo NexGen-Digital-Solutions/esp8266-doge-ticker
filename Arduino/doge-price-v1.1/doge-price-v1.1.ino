@@ -12,15 +12,21 @@
 
 Adafruit_SSD1306 display(128, 32, &Wire, OLED_RESET);
 
-const char* ssid = "Jones";
-const char* password = "Jhome@10820";
+// ============================================== //
+// ===== INSERT YOUR WIFI NETWORK INFO HERE ===== //
+// ============================================== //
+const char* ssid = "INSERT_SSID_HERE";
+const char* password = "INSERT_PASSWORD_HERE";
+// ============================================== //
+// ============================================== //
+// ============================================== //
 
 const int httpsPort = 443;
 
 // SHA1 fingerprint of the certificate
 const char fingerprint[] PROGMEM = "10 76 19 6B E9 E5 87 5A 26 12 15 DE 9F 7D 3B 92 9A 7F 30 13";
 
-// Define LEDS
+// Define LED pins
 int posLed = 14;
 int negLed = 12;
 int infoLed = 13;
@@ -28,9 +34,11 @@ int infoLed = 13;
 void setup()
 {
   Serial.begin(115200);
+
+  Serial.println('Initializing Display');
+  
   // initialize with the I2C addr 0x3C
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  //Serial.println('Initializing Display');
 
   clearDisplay();  // Clear the buffer.
 
@@ -38,7 +46,6 @@ void setup()
   pinMode(posLed, OUTPUT);
   pinMode(negLed, OUTPUT);
   pinMode(infoLed, OUTPUT);
-  flashLed();
 
   // Display Text
   display.setTextSize(1);
@@ -46,13 +53,14 @@ void setup()
   display.setCursor(1, 1);
   display.print("Initializing");
   updateDisplay();
-  delay(1000);
+  flashLed();
+  delay(750);
   clearDisplay();
-  Serial.println('\n');
 
+  infoOn(); // Turn on blue info LED
+  
+  // Connect to wireless network
   WiFi.begin(ssid, password);
-
-  infoOn();
 
   Serial.print("Connecting to ");
   Serial.print(ssid); Serial.println(" ...");
@@ -68,7 +76,7 @@ void setup()
   int i = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(1000);
+    delay(1000); // Wait for WiFi to connect
     Serial.print(++i); Serial.print(' ');
     display.print("..");
     updateDisplay();
@@ -76,16 +84,18 @@ void setup()
 
   // Breifly Show WiFi Information
   showLanInfo();
-  delay(2000);
+  delay(1000);
 
   // Set time via NTP, as required for x.509 validation
   configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
   Serial.print("Waiting for NTP time sync: ");
+  
   clearDisplay();
   display.setCursor(1, 0);
   display.print("Syncing Time");
   updateDisplay();
+  
   time_t now = time(nullptr);
   while (now < 8 * 3600 * 2) {
     delay(500);
@@ -94,11 +104,13 @@ void setup()
     updateDisplay();
     now = time(nullptr);
   }
-  Serial.println("");
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
+  
   Serial.print("Current time: ");
   Serial.print(asctime(&timeinfo));
+
+  // Show time on display
   clearDisplay();
   display.setCursor(1, 0);
   display.print("Current Time");
@@ -133,6 +145,10 @@ void loop()
 
     // While we are connected, read the data
     while (client.connected()) {
+
+      display.print("Fetching Data");
+      updateDisplay();
+      
       String line = client.readStringUntil('\n');
       if (line == "\r") {
         //Serial.println("Data Received");
@@ -284,26 +300,32 @@ void updatePrice(String base, String target, String price, const char* change) {
 
 void updateLed(const char* changeVal) {
 
+  // TO-DO(maybe): Can we cast char* to int? Which is faster/more efficient?
+  
+  // If change char* begins with a '-' change is negative
+  // So, turn on red led
   if (changeVal[0] == '-') {
     // change is negative
-    Serial.println("val < 0");
     negOn();
 
+  // Otherwise, it's a positive value, turn on green led
   } else {
-    Serial.println("val >= 0");
     posOn();
   }
 
 }
 
+// Function update the display
 void updateDisplay() {
   display.display();
 }
 
+// Function to clear the display
 void clearDisplay() {
   display.clearDisplay();
 }
 
+// Function to run through each color of the RGB led
 void flashLed() {
   
   allOff();
@@ -319,28 +341,31 @@ void flashLed() {
   infoOff();
 }
 
+// Function to turn all LEDs off
 void allOff() {
   digitalWrite(posLed, LOW);
   digitalWrite(negLed, LOW);
   digitalWrite(infoLed, LOW);
 }
 
-// Green LED
+// Green LED on
 void posOn() {
   allOff();
   digitalWrite(posLed, HIGH);
 }
 
+// Green LED off
 void posOff() {
   digitalWrite(posLed, LOW);
 }
 
-// Red LED
+// Red LED on
 void negOn() {
   allOff();
   digitalWrite(negLed, HIGH);
 }
 
+// Red LED off
 void negOff() {
   digitalWrite(negLed, LOW);
 }
@@ -374,12 +399,13 @@ void flashRed() {
   delay(250);
 }
 
-// Blue LED
+// Blue LED on
 void infoOn() {
   allOff();
   digitalWrite(infoLed, HIGH);
 }
 
+// Blue LED off
 void infoOff() {
   digitalWrite(infoLed, LOW);
 }
