@@ -12,6 +12,8 @@
 
 Adafruit_SSD1306 display(128, 32, &Wire, OLED_RESET);
 
+WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
+
 // ============================================== //
 // ===== INSERT YOUR WIFI NETWORK INFO HERE ===== //
 // ============================================== //
@@ -31,12 +33,15 @@ int posLed = 14;
 int negLed = 12;
 int infoLed = 13;
 
+// Define Global Progress bar val
+int progVal;
+
 void setup()
 {
   Serial.begin(115200);
 
   Serial.println('Initializing Display');
-  
+
   // initialize with the I2C addr 0x3C
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
@@ -47,6 +52,19 @@ void setup()
   pinMode(negLed, OUTPUT);
   pinMode(infoLed, OUTPUT);
 
+  gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP & event)
+  {
+    // Progress Bar
+    drawProgressbar(0, 20, 120, 10, 100);
+  });
+
+  disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected & event)
+  {
+    Serial.println("Wi-Fi disconnected");
+    // Show error on display
+    displayError("Wi-Fi", "Disconnected!");
+  });
+
   // Display Text
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -54,11 +72,13 @@ void setup()
   display.print("Initializing");
   updateDisplay();
   flashLed();
+  drawProgressbar(0, 20, 120, 10, 100);
+  display.display();
   delay(750);
   clearDisplay();
 
   infoOn(); // Turn on blue info LED
-  
+
   // Connect to wireless network
   WiFi.begin(ssid, password);
 
@@ -71,31 +91,43 @@ void setup()
   display.setCursor(1, 1);
   display.print("Connecting to: ");
   display.println(ssid);
+
+  drawProgressbar(0, 20, 120, 10, 10);
+  progVal = 10;
+  
   updateDisplay();
 
   int i = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(1000); // Wait for WiFi to connect
+    delay(500); // Wait for WiFi to connect
     Serial.print(++i); Serial.print(' ');
-    display.print("..");
+
+    // Progress Bar
+    drawProgressbar(0, 20, 120, 10, progVal+5);
+    int d = progVal+5;
+    progVal = d;
+
     updateDisplay();
+
   }
 
   // Breifly Show WiFi Information
   showLanInfo();
+  progVal = 0; //reset global progress value
+
   delay(1000);
 
   // Set time via NTP, as required for x.509 validation
   configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
   Serial.print("Waiting for NTP time sync: ");
-  
+
   clearDisplay();
   display.setCursor(1, 0);
   display.print("Syncing Time");
   updateDisplay();
-  
+
   time_t now = time(nullptr);
   while (now < 8 * 3600 * 2) {
     delay(500);
@@ -103,10 +135,20 @@ void setup()
     display.print(".");
     updateDisplay();
     now = time(nullptr);
+
+    // Progress Bar
+    drawProgressbar(0, 20, 120, 10, progVal+5);
+    int d = progVal+5;
+    progVal = d;
+
+    updateDisplay();
   }
+
+  progVal = 0; // reset progVal
+  
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
-  
+
   Serial.print("Current time: ");
   Serial.print(asctime(&timeinfo));
 
@@ -134,6 +176,12 @@ void loop()
     // If we can't connect...
     if (!client.connect(host, httpsPort)) {
       Serial.println("connection failed");
+
+      String wifiError = "Can't connect to WiFi!";
+
+      // Show error on display
+      displayError("WiFi Error", wifiError);
+
       return;
     }
 
@@ -146,9 +194,6 @@ void loop()
     // While we are connected, read the data
     while (client.connected()) {
 
-      display.print("Fetching Data");
-      updateDisplay();
-      
       String line = client.readStringUntil('\n');
       if (line == "\r") {
         //Serial.println("Data Received");
@@ -213,7 +258,7 @@ void loop()
       Serial.println(apiError);
 
       // Show error on display
-      displayError(apiError);
+      displayError("API ERROR", apiError);
 
     }
   }
@@ -222,31 +267,71 @@ void loop()
   delay(30000);
 }
 
-void displayError(String e) {
+// Function update the display
+void updateDisplay() {
+  display.display();
+}
 
-  // Flash Red LED to Alert of API Error
+// Function to clear the display
+void clearDisplay() {
+  display.clearDisplay();
+}
+
+void drawProgressbar(int x, int y, int width, int height, int progress)
+{
+
+  progress = progress > 100 ? 100 : progress;
+  progress = progress < 0 ? 0 : progress;
+
+  float bar = ((float)(width - 1) / 100) * progress;
+
+  display.drawRect(x, y, width, height, WHITE);
+  display.fillRect(x + 2, y + 2, bar , height - 4, WHITE);
+
+
+  // Display progress text
+  if ( height >= 15) {
+    display.setCursor((width / 2) - 3, y + 5 );
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    if ( progress >= 50)
+      display.setTextColor(BLACK, WHITE); // 'inverted' text
+
+    display.print(progress);
+    display.print("%");
+  }
+}
+
+void displayError(String type, String e) {
+
+  // Flash Red LED to Alert of Error
   flashRed();
-  
+
   // Clear Display Buffer
   clearDisplay();
 
   // Set Title
   display.setTextColor(BLACK, WHITE); // Inverted Display White BG, BLK Text
   display.setCursor(1, 0);
-  display.print("API ERROR");
+  display.print(type);
 
   // Show Error
-  display.setCursor(1, 25);
+  display.setCursor(1, 11);
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.print(e);
 
+  display.setCursor(1, 21);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.print("Retrying in 15 seconds.");
+
   // Update the display
   updateDisplay();
 
-  // Display error for 30 seconds.
-  delay(30000);
-  
+  // Display error for 15 seconds.
+  delay(15);
+
 }
 
 void showLanInfo() {
@@ -301,42 +386,38 @@ void updatePrice(String base, String target, String price, const char* change) {
 void updateLed(const char* changeVal) {
 
   // TO-DO(maybe): Can we cast char* to int? Which is faster/more efficient?
-  
+
   // If change char* begins with a '-' change is negative
   // So, turn on red led
   if (changeVal[0] == '-') {
     // change is negative
     negOn();
 
-  // Otherwise, it's a positive value, turn on green led
+    // Otherwise, it's a positive value, turn on green led
   } else {
     posOn();
   }
 
 }
 
-// Function update the display
-void updateDisplay() {
-  display.display();
-}
-
-// Function to clear the display
-void clearDisplay() {
-  display.clearDisplay();
-}
-
 // Function to run through each color of the RGB led
 void flashLed() {
-  
+
   allOff();
-  
+
   posOn();
+  drawProgressbar(0, 20, 120, 10, 25);
+  display.display();
   delay(250);
   posOff();
   negOn();
+  drawProgressbar(0, 20, 120, 10, 50);
+  display.display();
   delay(250);
   negOff();
   infoOn();
+  drawProgressbar(0, 20, 120, 10, 75);
+  display.display();
   delay(250);
   infoOff();
 }
@@ -372,7 +453,7 @@ void negOff() {
 
 // Flash Red LED 5 times
 void flashRed() {
-  
+
   // Turn off all LED's first.
   allOff();
 
